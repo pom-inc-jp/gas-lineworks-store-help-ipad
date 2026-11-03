@@ -1,0 +1,37 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+<title>店舗ヘルプ QRコード</title><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<style>
+ body{margin:0;font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;color:#222;background:#fff}
+ .wrap{max-width:980px;margin:0 auto;padding:24px 16px}
+ h1{font-size:20px;margin:0 0 4px} p{color:#555;font-size:14px;margin:0 0 18px;line-height:1.6}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px}
+ .card{border:1px solid #ddd;border-radius:12px;padding:14px;text-align:center;break-inside:avoid}
+ .card svg{width:160px;height:160px;display:block;margin:0 auto}
+ .card .nm{font-size:12px;color:#444;margin-top:6px}
+ .warn{background:#fff6e0;border:1px solid #f0d58a;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:18px}
+ @media print{.noprint{display:none}.wrap{padding:0}.card{border-color:#bbb}}
+</style></head><body><div class="wrap">
+<h1>店舗ヘルプ iPad用QRコード</h1>
+<p class="noprint">各店舗の iPad のカメラで、その店舗のQRコードを読み取ってください。開いた画面で Safari の共有ボタン →「ホーム画面に追加」を押すと、店舗のロゴのアイコンで置けます。</p>
+<div class="warn noprint">このQRコードには合言葉が入っています。店舗の iPad 以外には見せないでください（印刷した紙は使い終わったら処分してください）。</div>
+<div class="grid" id="grid"></div></div>
+<script src="qrcode.js"></script>
+<script>
+(function(){
+  var hp = new URLSearchParams(location.hash.replace(/^#/, ''));
+  var g = hp.get('g'), k = hp.get('k');
+  var grid = document.getElementById('grid');
+  if (!g || !k) { grid.textContent = 'このページは GAS の showIpadUrl で出たURLから開いてください。'; return; }
+  var base = location.origin + location.pathname.replace(/qr.html$/, '');
+  var list = [{"name":"RECOCO渋谷","slug":"recoco_shibuya"},{"name":"CASSE","slug":"casse"},{"name":"RECOCO下北沢","slug":"recoco_shimokita"},{"name":"セルフォト","slug":"selphoto"},{"name":"RETOPO渋谷","slug":"retopo_shibuya"}];
+  list.push({ name: '全店舗のボタン', slug: '' });
+  list.forEach(function(it){
+    var url = base + (it.slug ? it.slug + '/' : '') + '#g=' + encodeURIComponent(g) + '&k=' + encodeURIComponent(k);
+    var q = qrcode(0, 'M'); q.addData(url); q.make();
+    var c = document.createElement('div'); c.className = 'card';
+    c.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2 });
+    var n = document.createElement('div'); n.className = 'nm'; n.textContent = it.name; c.appendChild(n);
+    grid.appendChild(c);
+  });
+})();
+</script></body></html>

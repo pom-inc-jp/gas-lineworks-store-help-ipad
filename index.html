@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<!-- built from store-bot-gas storeBot_ipad.gs 2026.10.24-6 -->
+<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-1 -->
 <title>店舗ヘルプ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,10 +13,12 @@
 // URL の # の後ろ（GitHub には送られない）に g=ウェブアプリのID、k=合言葉 または s=QRの共有キー が入っている
 (function(){
   var hp = new URLSearchParams(location.hash.replace(/^#/, ''));
-  var saved = {}; try { saved = JSON.parse(localStorage.getItem('storeHelpConn') || '{}'); } catch (e) {}
-  var conn = { g: hp.get('g') || '', k: hp.get('k') || hp.get('s') || '', share: !!hp.get('s'), store: hp.get('store') || '' };
-  if (!conn.g || !conn.k) conn = saved;                       // ホーム画面から開いて # が消えた場合の保険
-  else if (!conn.share) { try { localStorage.setItem('storeHelpConn', JSON.stringify(conn)); } catch (e) {} }
+  var PAGE_STORE = '';                          // 店舗ごとのページなら店舗名（全店舗のページは空）
+  var KEYC = 'storeHelpConn:' + location.pathname;
+  var saved = {}; try { saved = JSON.parse(localStorage.getItem(KEYC) || '{}'); } catch (e) {}
+  var conn = { g: hp.get('g') || '', k: hp.get('k') || hp.get('s') || '', share: !!hp.get('s'), store: PAGE_STORE || hp.get('store') || '' };
+  if (!conn.g || !conn.k) { conn = saved; if (PAGE_STORE) conn.store = PAGE_STORE; }   // ホーム画面から開いて # が消えた場合の保険
+  else if (!conn.share) { try { localStorage.setItem(KEYC, JSON.stringify(conn)); } catch (e) {} }
   window.__CONN = conn;
   window.__IMG = {"RECOCO渋谷":"img/recoco_shibuya.jpg","CASSE":"img/casse.jpg","RECOCO下北沢":"img/recoco_shimokita.jpg","セルフォト":"img/selphoto.jpg","RETOPO渋谷":"img/retopo_shibuya.jpg"};
   window.__PARTS = {"RECOCO渋谷":{"logo":"img/recoco_shibuya_logo.jpg","label":"img/recoco_shibuya_label.jpg"},"CASSE":{"logo":"img/casse_logo.jpg","label":"img/casse_label.jpg"},"RECOCO下北沢":{"logo":"img/recoco_shimokita_logo.jpg","label":"img/recoco_shimokita_label.jpg"},"セルフォト":{"logo":"img/selphoto_logo.jpg","label":"img/selphoto_label.jpg"},"RETOPO渋谷":{"logo":"img/retopo_shibuya_logo.jpg","label":"img/retopo_shibuya_label.jpg"}};
