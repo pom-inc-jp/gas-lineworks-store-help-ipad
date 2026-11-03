@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-4 -->
+<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-5 -->
 <title>セルフォトヘルプ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -35,7 +35,7 @@ Object.defineProperty(google.script, 'run', { get: function(){
   var ok = null, ng = null, o = {
     withSuccessHandler: function(f){ ok = f; return o; },
     withFailureHandler: function(f){ ng = f; return o; },
-    ipadSendHelp: function(k, store){ go(__api('help', { store: store })); },
+    ipadSendHelp: function(k, store, dev){ go(__api('help', { store: store, dev: dev || '' })); },
     ipadSendNote: function(k, no, text){ go(__api('note', { no: no, text: text })); },
     ipadStatus:   function(k, nos){ go(__api('status', { nos: nos.join(',') })); },
     ipadShareLink: function(k, nos){ go(__api('share', { nos: nos.join(',') }).then(function(r){
@@ -73,6 +73,14 @@ Object.defineProperty(google.script, 'run', { get: function(){
   .bub.sys { background:#fff; border:3px solid var(--help); }
   .bub.sys b { color:var(--help); }
   .meta { font-size:11px; color:#26364d; margin:0 2px 2px; white-space:nowrap; }
+  /* 画面上の帯：「○○さんが向かいます！」を大きく出す */
+  .banner { display:none; flex:none; background:#0a9e47; color:#fff; font-size:24px; font-weight:800; line-height:1.35;
+            padding:14px 16px; text-align:center; box-shadow:0 2px 6px rgba(0,0,0,.18); z-index:1; }
+  .banner .ln + .ln { margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,.35); }
+  .banner.wait { background:#f4b400; color:#3b2b00; font-size:19px; }
+  .banner small { display:block; font-size:13px; font-weight:600; opacity:.85; margin-top:2px; }
+  .pill.ok { background:#0a9e47; font-size:16px; font-weight:800; padding:8px 16px; }
+  .pill.warn { background:#c77700; font-size:15px; font-weight:700; padding:7px 14px; }
   .empty { text-align:center; color:#fff; margin-top:30vh; font-size:16px; opacity:.9; line-height:1.7; }
   .inputbar { background:#fff; border-top:1px solid #ddd; padding:8px 10px; display:flex; gap:8px; align-items:center; flex:none; }
   .inputbar select { font-size:14px; border:1px solid #ddd; border-radius:10px; padding:8px; background:#f6f6f6; max-width:34%; }
@@ -128,6 +136,33 @@ Object.defineProperty(google.script, 'run', { get: function(){
     .menu .tile.part .lab { width:auto; max-width:90%; max-height:38%; }
     .menu.single .tile.qr { flex-direction:row; padding:18px; gap:14px; }
   }
+  /* スマホ（幅が狭い）：トークを広く取り、ボタンは下に小さめの帯で並べる */
+  @media (max-width: 599px) {
+    header { padding:calc(10px + env(safe-area-inset-top)) 12px 10px; gap:10px; }
+    header .av { width:30px; height:30px; font-size:17px; }
+    header .nm { font-size:16px; } header .st { font-size:11px; }
+    .banner { font-size:20px; padding:12px; } .banner.wait { font-size:16px; }
+    .empty { margin-top:18vh; font-size:15px; }
+    .menuHead { font-size:13px; padding:5px 12px; }
+    .menu { height:auto; grid-template-rows:none; grid-template-columns:repeat(3,1fr); gap:8px; padding:8px 8px calc(8px + env(safe-area-inset-bottom)); }
+    .menu .tile { height:76px; aspect-ratio:auto; border-radius:14px; }
+    .menu .tile.part { flex-direction:column; justify-content:center; padding:6px 4px; }
+    .menu .tile.part .logoBox { flex:1; min-height:0; }
+    .menu .tile.part .logo { width:auto; max-width:86%; max-height:100%; }
+    .menu .tile.part .lab { width:auto; max-width:94%; max-height:26px; margin:2px auto 0; }
+    .menu .tile.txt { font-size:14px; gap:4px; } .menu .tile.txt small { font-size:11px; padding:2px 8px; }
+    /* 店舗ごとのURL：店舗ボタンを横長に、スマホで続けるは小さく */
+    .menu.single { grid-template-columns:3fr 1fr; }
+    .menu.single .tile { height:88px; }
+    .menu.single .tile.part { flex-direction:row; align-items:center; gap:6px; padding:8px 10px; }
+    .menu.single .tile.part .logoBox { flex:1; height:100%; }
+    .menu.single .tile.part .lab { max-width:58%; max-height:64px; margin:0; }
+    .menu .tile.qr { font-size:12px; gap:3px; box-shadow:0 3px 0 #18222f; margin-bottom:3px; }
+    .menu .tile.qr[disabled] { box-shadow:0 3px 0 #a7adb6; }
+    .menu .tile.qr svg { width:26px; height:26px; }
+    .menu .tile.qr small { display:none; }
+    .inputbar input { font-size:16px; padding:10px 12px; }
+  }
   .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; padding:16px; }
   .modal.on { display:flex; }
   .dlg { background:#fff; border-radius:14px; width:100%; max-width:380px; overflow:hidden; text-align:center; }
@@ -142,6 +177,7 @@ Object.defineProperty(google.script, 'run', { get: function(){
 </style></head><body>
 <header><div class="av">🆘</div><div style="flex:1"><div class="nm">店舗ヘルプ</div><div class="st" id="sub">社員の LINE WORKS につながります</div></div></header>
 <div class="layout"><div class="left">
+<div class="banner" id="banner"></div>
 <div id="chat"></div>
 <div class="inputbar" id="inputbar" style="display:none">
   <select id="target"></select>
@@ -181,6 +217,8 @@ if (D.share) {
   document.getElementById('sub').textContent = '店舗iPadのやり取りの続き';
 }
 var pending = null, lastSig = '';
+// スマホ（画面幅が狭い、または iPhone / Android のスマホ）から押されたら、社員には「店舗スマホ」と出す
+var DEV = (window.matchMedia('(max-width: 599px)').matches || /iPhone|Android.+Mobile/.test(navigator.userAgent)) ? 'phone' : 'ipad';
 
 function load() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(active)); } catch (e) {} }
@@ -229,7 +267,7 @@ document.getElementById('yesBtn').onclick = function(){
     save();
     if (r.dup) toast('#' + r.no + ' ですでに呼んでいます。そのままお待ちください');
     lastSig = ''; refresh();
-  }).withFailureHandler(function(){ setBusy(false); toast('通信できませんでした。電話などで直接連絡してください'); }).ipadSendHelp(D.token, store);
+  }).withFailureHandler(function(){ setBusy(false); toast('通信できませんでした。電話などで直接連絡してください'); }).ipadSendHelp(D.token, store, DEV);
 };
 function setBusy(on) { Array.prototype.forEach.call(document.querySelectorAll('.tile'), function(b){ b.disabled = on; }); }
 
@@ -273,7 +311,9 @@ function render(items) {
     (it.msgs || []).forEach(function(m) {
       if (m.from === 'status') {
         hasStatusEvent = true;
-        chat.appendChild(el('div', 'pill', (m.text.indexOf('向かいます') >= 0 ? '✅ ' : '⚠️ ') + m.text));
+        var okm = m.text.indexOf('向かいます') >= 0;
+        chat.appendChild(el('div', 'pill ' + (okm ? 'ok' : 'warn'), (okm ? '✅ ' + m.text + '！' : '⚠️ ' + m.text)));
+        it._last = { ok: okm, text: m.text };
       } else if (m.from === 'ipad') {
         var r = el('div', 'row me'); r.appendChild(el('div', 'bub', m.text)); chat.appendChild(r);
       } else {
@@ -287,9 +327,10 @@ function render(items) {
     if (it.status === '対応済み') { if (!hasStatusEvent) st = '✅ ' + (it.responder || '社員') + 'さんが向かいます'; }
     else if (it.status === '未対応') st = '⏳ 社員の対応を待っています';
     else st = '受付終了（' + (it.status || '終了') + '）';
-    if (st) chat.appendChild(el('div', 'pill', st));
+    if (st) chat.appendChild(el('div', 'pill' + (it.status === '対応済み' ? ' ok' : ''), st + (it.status === '対応済み' ? '！' : '')));
     if (it.open) { var o = el('option', null, '#' + it.no + ' ' + it.store + ' へ'); o.value = it.no; sel.appendChild(o); }
   });
+  renderBanner(live.filter(function(it){ return it.open; }));
   if (keep && Array.prototype.some.call(sel.options, function(o){ return o.value === keep; })) sel.value = keep;
   else if (sel.options.length) sel.value = sel.options[sel.options.length - 1].value;
   document.getElementById('inputbar').style.display = sel.options.length ? 'flex' : 'none';
@@ -301,6 +342,25 @@ function render(items) {
     save();
   }
   chat.scrollTop = chat.scrollHeight;
+}
+
+// 画面上の帯：やり取り中のヘルプの「いまの状態」を大きく出す
+function renderBanner(list) {
+  var bn = document.getElementById('banner'); bn.textContent = '';
+  if (!list.length) { bn.style.display = 'none'; return; }
+  var allOk = true;
+  list.slice(-2).forEach(function(it) {
+    var ln = el('div', 'ln'), txt, sub = list.length > 1 ? '#' + it.no + ' ' + it.store : '';
+    if (it.status === '対応済み') txt = '✅ ' + (it.responder || '社員') + 'さんが向かいます！';
+    else {
+      allOk = false;
+      txt = (it._last && !it._last.ok) ? '⚠️ ' + it._last.text : '⏳ 社員の対応を待っています';
+    }
+    ln.appendChild(document.createTextNode(txt)); if (sub) ln.appendChild(el('small', null, sub));
+    bn.appendChild(ln);
+  });
+  bn.className = 'banner' + (allOk ? '' : ' wait');
+  bn.style.display = 'block';
 }
 
 document.getElementById('qrTile').onclick = function(){
