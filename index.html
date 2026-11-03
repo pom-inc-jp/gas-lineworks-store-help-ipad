@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-1 -->
+<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-4 -->
 <title>店舗ヘルプ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,6 +22,7 @@
   window.__CONN = conn;
   window.__IMG = {"RECOCO渋谷":"img/recoco_shibuya.jpg","CASSE":"img/casse.jpg","RECOCO下北沢":"img/recoco_shimokita.jpg","セルフォト":"img/selphoto.jpg","RETOPO渋谷":"img/retopo_shibuya.jpg"};
   window.__PARTS = {"RECOCO渋谷":{"logo":"img/recoco_shibuya_logo.jpg","label":"img/recoco_shibuya_label.jpg"},"CASSE":{"logo":"img/casse_logo.jpg","label":"img/casse_label.jpg"},"RECOCO下北沢":{"logo":"img/recoco_shimokita_logo.jpg","label":"img/recoco_shimokita_label.jpg"},"セルフォト":{"logo":"img/selphoto_logo.jpg","label":"img/selphoto_label.jpg"},"RETOPO渋谷":{"logo":"img/retopo_shibuya_logo.jpg","label":"img/retopo_shibuya_label.jpg"}};
+  window.__STORES = [{"name":"RECOCO渋谷","emoji":"","color":"#2f6f4e"},{"name":"CASSE","emoji":"","color":"#2f4a7a"},{"name":"RECOCO下北沢","emoji":"","color":"#9a3b3b"},{"name":"セルフォト","emoji":"","color":"#5a5f66"},{"name":"RETOPO渋谷","emoji":"","color":"#b85c8a"}];
 })();
 function __api(op, params) {
   var c = window.__CONN, q = new URLSearchParams(Object.assign({ api: 'ipad', op: op, k: c.k }, params || {}));
@@ -220,6 +221,7 @@ document.getElementById('noBtn').onclick = function(){ document.getElementById('
 document.getElementById('yesBtn').onclick = function(){
   var store = pending; document.getElementById('modal').classList.remove('on'); if (!store) return;
   setBusy(true);
+  toast('送信中です…（数秒かかることがあります）');
   google.script.run.withSuccessHandler(function(r){
     setBusy(false);
     if (!r || !r.ok) { toast((r && r.error) || '送れませんでした'); if (r && r.contact) toast('緊急連絡先: ' + r.contact); return; }
@@ -327,6 +329,25 @@ document.addEventListener('visibilitychange', function(){ if (!document.hidden) 
 (function(){
   function fail(msg){ document.getElementById('chat').innerHTML = ''; var p = document.createElement('div'); p.className = 'empty'; p.style.whiteSpace = 'pre-line'; p.textContent = msg; document.getElementById('chat').appendChild(p); document.getElementById('right').style.display = 'none'; }
   if (!window.__CONN || !window.__CONN.g || !window.__CONN.k) { fail('このページは、店舗の iPad 用のURLから開いてください。'); return; }
+  function start(D){ window.__D = D; var s = document.createElement('script'); s.textContent = document.getElementById('main').textContent; document.body.appendChild(s); }
+  function badUrl(){ fail('URLが古いか正しくありません。\n管理者に新しいURLをもらってください。'); }
+  // 店舗の iPad（合言葉で開いたとき）：ページに入れてある店舗一覧で、すぐにボタンを出す。
+  // GAS（起動に数秒かかることがある）への確認は裏で行い、合言葉が古ければそこで止める。確認の通信で GAS も起きるので、押したときの送信も速くなる
+  if (!window.__CONN.share) {
+    var stores = window.__STORES.map(function(x){ var o = { name: x.name, emoji: x.emoji, color: x.color, img: window.__IMG[x.name] || '' };
+      var pt = window.__PARTS[x.name]; if (pt) { o.logo = pt.logo; o.label = pt.label; } return o; });
+    try { var em = JSON.parse(localStorage.getItem('storeHelpEmoji') || '{}'); stores.forEach(function(o){ if (em[o.name]) o.emoji = em[o.name]; }); } catch (e) {}
+    var st = window.__CONN.store, fx = st && stores.some(function(o){ return o.name === st; }) ? st : '';
+    start({ token: window.__CONN.k, stores: stores, share: false, nos: [], fixedStore: fx });
+    __api('init').then(function(r){
+      if (!r || !r.ok) { if (r && r.expired) badUrl(); return; }
+      var em = {}; (r.stores || []).forEach(function(x){ em[x.name] = x.emoji || ''; });
+      try { localStorage.setItem('storeHelpEmoji', JSON.stringify(em)); } catch (e) {}
+      (window.__D.stores || []).forEach(function(o){ if (em[o.name] !== undefined) o.emoji = em[o.name]; });
+    }, function(){});
+    return;
+  }
+  // スマホで続ける（QRで開いたとき）：見てよい番号を GAS に聞いてから出す
   __api('init').then(function(r){
     if (!r || !r.ok) { fail(r && r.expired ? (window.__CONN.share ? 'このQRコードは期限が切れています。\n続けてやり取りするときは、店舗のiPadでもう一度QRコードを出してください。' : 'URLが古いか正しくありません。\n管理者に新しいURLをもらってください。') : '読み込みに失敗しました。'); return; }
     r.stores.forEach(function(s){
@@ -334,8 +355,7 @@ document.addEventListener('visibilitychange', function(){ if (!document.hidden) 
       var pt = window.__PARTS[s.name]; if (pt && !r.share) { s.logo = pt.logo; s.label = pt.label; }
     });
     var fixed = window.__CONN.store && r.stores.some(function(s){ return s.name === window.__CONN.store; }) ? window.__CONN.store : '';
-    window.__D = { token: window.__CONN.k, stores: r.stores, share: r.share, nos: r.nos || [], fixedStore: r.share ? '' : fixed };
-    var s = document.createElement('script'); s.textContent = document.getElementById('main').textContent; document.body.appendChild(s);
+    start({ token: window.__CONN.k, stores: r.stores, share: r.share, nos: r.nos || [], fixedStore: r.share ? '' : fixed });
   }, function(){ fail('通信できませんでした。\nネット接続を確かめて、開き直してください。'); });
 })();
 </script>
