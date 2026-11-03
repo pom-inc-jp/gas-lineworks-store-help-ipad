@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-5 -->
+<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-6 -->
 <title>RETOPO渋谷ヘルプ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,6 +37,7 @@ Object.defineProperty(google.script, 'run', { get: function(){
     withFailureHandler: function(f){ ng = f; return o; },
     ipadSendHelp: function(k, store, dev){ go(__api('help', { store: store, dev: dev || '' })); },
     ipadSendNote: function(k, no, text){ go(__api('note', { no: no, text: text })); },
+    ipadCancelHelp: function(k, no, reason){ go(__api('cancel', { no: no, reason: reason })); },
     ipadStatus:   function(k, nos){ go(__api('status', { nos: nos.join(',') })); },
     ipadShareLink: function(k, nos){ go(__api('share', { nos: nos.join(',') }).then(function(r){
       if (r && r.ok && r.key) r.url = location.origin + location.pathname + '#g=' + encodeURIComponent(window.__CONN.g) + '&s=' + r.key;
@@ -79,6 +80,14 @@ Object.defineProperty(google.script, 'run', { get: function(){
   .banner .ln + .ln { margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,.35); }
   .banner.wait { background:#f4b400; color:#3b2b00; font-size:19px; }
   .banner small { display:block; font-size:13px; font-weight:600; opacity:.85; margin-top:2px; }
+  .banner .ln { display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap; }
+  .banner .ln > span { min-width:0; }
+  .cxl { flex:none; border:2px solid rgba(255,255,255,.85); background:rgba(0,0,0,.12); color:inherit; font-size:14px; font-weight:700;
+         border-radius:999px; padding:6px 14px; cursor:pointer; }
+  .banner.wait .cxl { border-color:rgba(59,43,0,.55); }
+  .dlg .reason { border:1px solid #ddd; background:#f6f6f6; border-radius:12px; font-size:17px; font-weight:700; padding:14px; color:#222; }
+  .dlg .reason:active { background:#e9e9e9; }
+  .pill.done { background:#5f6b7a; font-size:15px; font-weight:700; padding:7px 14px; }
   .pill.ok { background:#0a9e47; font-size:16px; font-weight:800; padding:8px 16px; }
   .pill.warn { background:#c77700; font-size:15px; font-weight:700; padding:7px 14px; }
   .empty { text-align:center; color:#fff; margin-top:30vh; font-size:16px; opacity:.9; line-height:1.7; }
@@ -190,6 +199,14 @@ Object.defineProperty(google.script, 'run', { get: function(){
 <div class="modal" id="modal"><div class="dlg">
   <p id="askText"></p>
   <div class="btns"><button id="noBtn">キャンセル</button><button class="yes" id="yesBtn">呼ぶ</button></div>
+</div></div>
+<div class="modal" id="cancelModal"><div class="dlg">
+  <p id="cancelText" style="padding-bottom:10px"></p>
+  <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
+    <button class="reason" data-r="mistake">間違えて押しました</button>
+    <button class="reason" data-r="solved">解決しました</button>
+  </div>
+  <div class="btns"><button id="cancelClose">戻る</button></div>
 </div></div>
 <div class="modal" id="qrModal"><div class="dlg">
   <p style="padding-bottom:8px">スマホのカメラで読み取ってください</p>
@@ -311,6 +328,7 @@ function render(items) {
     (it.msgs || []).forEach(function(m) {
       if (m.from === 'status') {
         hasStatusEvent = true;
+        if (m.text.indexOf('取り消しました') === 0) { it._cancelled = true; chat.appendChild(el('div', 'pill done', '🙆 ' + m.text)); return; }
         var okm = m.text.indexOf('向かいます') >= 0;
         chat.appendChild(el('div', 'pill ' + (okm ? 'ok' : 'warn'), (okm ? '✅ ' + m.text + '！' : '⚠️ ' + m.text)));
         it._last = { ok: okm, text: m.text };
@@ -326,7 +344,7 @@ function render(items) {
     var st = '';
     if (it.status === '対応済み') { if (!hasStatusEvent) st = '✅ ' + (it.responder || '社員') + 'さんが向かいます'; }
     else if (it.status === '未対応') st = '⏳ 社員の対応を待っています';
-    else st = '受付終了（' + (it.status || '終了') + '）';
+    else if (!it._cancelled) st = '受付終了（' + (it.status || '終了') + '）';
     if (st) chat.appendChild(el('div', 'pill' + (it.status === '対応済み' ? ' ok' : ''), st + (it.status === '対応済み' ? '！' : '')));
     if (it.open) { var o = el('option', null, '#' + it.no + ' ' + it.store + ' へ'); o.value = it.no; sel.appendChild(o); }
   });
@@ -356,7 +374,8 @@ function renderBanner(list) {
       allOk = false;
       txt = (it._last && !it._last.ok) ? '⚠️ ' + it._last.text : '⏳ 社員の対応を待っています';
     }
-    ln.appendChild(document.createTextNode(txt)); if (sub) ln.appendChild(el('small', null, sub));
+    var tx = el('span'); tx.appendChild(document.createTextNode(txt)); if (sub) tx.appendChild(el('small', null, sub)); ln.appendChild(tx);
+    var cb = el('button', 'cxl', '取り消す'); cb.onclick = function(){ openCancel(it); }; ln.appendChild(cb);
     bn.appendChild(ln);
   });
   bn.className = 'banner' + (allOk ? '' : ' wait');
@@ -378,6 +397,28 @@ document.getElementById('qrTile').onclick = function(){
     document.getElementById('qrModal').classList.add('on');
   }).withFailureHandler(function(){ toast('通信できませんでした'); }).ipadShareLink(D.token, nos);
 };
+// 取り消し：理由を選んで送る
+var cancelNo = null;
+function openCancel(it) {
+  cancelNo = it.no;
+  document.getElementById('cancelText').textContent = '#' + it.no + ' ' + it.store + ' のヘルプを取り消しますか？' +
+    (it.status === '対応済み' ? '\n（向かっている ' + (it.responder || '社員') + 'さんにも伝わります）' : '');
+  document.getElementById('cancelText').style.whiteSpace = 'pre-line';
+  document.getElementById('cancelModal').classList.add('on');
+}
+document.getElementById('cancelClose').onclick = function(){ document.getElementById('cancelModal').classList.remove('on'); cancelNo = null; };
+Array.prototype.forEach.call(document.querySelectorAll('#cancelModal .reason'), function(b){
+  b.onclick = function(){
+    var no = cancelNo, reason = b.getAttribute('data-r'); if (!no) return;
+    document.getElementById('cancelModal').classList.remove('on'); cancelNo = null;
+    toast('取り消しています…');
+    google.script.run.withSuccessHandler(function(r){
+      if (!r || !r.ok) { toast((r && r.error) || '取り消せませんでした'); return; }
+      toast('#' + r.no + ' を取り消しました。社員に伝わります');
+      lastSig = ''; refresh();
+    }).withFailureHandler(function(){ toast('通信できませんでした。電話などで直接伝えてください'); }).ipadCancelHelp(D.token, no, reason);
+  };
+});
 document.getElementById('qrClose').onclick = function(){ document.getElementById('qrModal').classList.remove('on'); };
 
 refresh();
