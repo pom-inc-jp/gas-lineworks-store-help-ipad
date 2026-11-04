@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.04-1 -->
+<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.04-2 -->
 <title>RETOPO渋谷ヘルプ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -183,6 +183,23 @@ Object.defineProperty(google.script, 'run', { get: function(){
   .dlg .yes { color:var(--send); font-weight:700; border-left:1px solid #e5e5e5; }
   .qrBtn { border:1px solid rgba(255,255,255,.5); background:transparent; color:#fff; border-radius:18px; padding:8px 12px; font-size:14px; }
   #qrBox svg, #qrBox img { width:240px; height:240px; }
+  /* ヘルプ送信中・送信完了の表示（画面中央に大きく） */
+  .sendOv { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:6; padding:16px; }
+  .sendOv.on { display:flex; }
+  .sendBox { background:#fff; border-radius:20px; padding:28px 26px 24px; min-width:240px; max-width:340px; text-align:center;
+             box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  .sendBox .spin { width:56px; height:56px; margin:0 auto 14px; border-radius:50%; border:6px solid #f3d3cf; border-top-color:var(--help);
+                   animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .sendBox .sendIcon { display:none; width:64px; height:64px; margin:0 auto 12px; border-radius:50%; color:#fff; font-size:38px; font-weight:800;
+                       line-height:64px; }
+  .sendBox .sendMsg { font-size:20px; font-weight:800; color:#222; line-height:1.4; }
+  .sendBox .sendSub { font-size:14px; color:#666; margin-top:6px; line-height:1.5; white-space:pre-line; }
+  .sendBox.done .spin, .sendBox.ng .spin { display:none; }
+  .sendBox.done .sendIcon { display:block; background:#0a9e47; }
+  .sendBox.done .sendMsg { color:#0a7d39; }
+  .sendBox.ng .sendIcon { display:block; background:var(--help); }
+  .sendBox.ng .sendMsg { color:#b3261e; }
   .toast { position:fixed; left:50%; top:40%; transform:translateX(-50%); background:rgba(0,0,0,.78); color:#fff;
            padding:10px 16px; border-radius:12px; font-size:15px; display:none; max-width:90%; text-align:center; z-index:5; }
 </style></head><body>
@@ -217,6 +234,7 @@ Object.defineProperty(google.script, 'run', { get: function(){
   <div class="btns"><button id="qrClose">閉じる</button></div>
 </div></div>
 <div class="toast" id="toast"></div>
+<div class="sendOv" id="sendOv"><div class="sendBox" id="sendBox"><div class="spin" id="sendSpin"></div><div class="sendIcon" id="sendIcon"></div><div class="sendMsg" id="sendMsg"></div><div class="sendSub" id="sendSub"></div></div></div>
 <script src="../qrcode.js"></script>
 <script type="text/x-main" id="main">
 var D = window.__D;
@@ -278,16 +296,29 @@ document.getElementById('noBtn').onclick = function(){ document.getElementById('
 document.getElementById('yesBtn').onclick = function(){
   var store = pending; document.getElementById('modal').classList.remove('on'); if (!store) return;
   setBusy(true);
-  toast('送信中です…（数秒かかることがあります）');
+  sendState('busy', 'ヘルプを送っています…', '数秒かかることがあります');
   google.script.run.withSuccessHandler(function(r){
     setBusy(false);
-    if (!r || !r.ok) { toast((r && r.error) || '送れませんでした'); if (r && r.contact) toast('緊急連絡先: ' + r.contact); return; }
+    if (!r || !r.ok) { sendState('ng', '送れませんでした', ((r && r.error) || 'もう一度押してください') + (r && r.contact ? '\n緊急連絡先: ' + r.contact : '')); return; }
     if (!active.some(function(a){ return a.no === r.no; })) active.push({ no: r.no, store: r.store, at: Date.now() });
     save();
-    if (r.dup) toast('#' + r.no + ' ですでに呼んでいます。そのままお待ちください');
+    if (r.dup) sendState('done', 'すでに呼んでいます', '#' + r.no + ' で社員に届いています。\nそのままお待ちください');
+    else sendState('done', '社員に届きました', '#' + r.no + ' ' + r.store + '\n社員が向かうと、上に表示されます');
     lastSig = ''; refresh();
-  }).withFailureHandler(function(){ setBusy(false); toast('通信できませんでした。電話などで直接連絡してください'); }).ipadSendHelp(D.token, store, DEV);
+  }).withFailureHandler(function(){ setBusy(false); sendState('ng', '送れませんでした', '通信できませんでした。\n電話などで直接連絡してください'); }).ipadSendHelp(D.token, store, DEV);
 };
+// 送信中（くるくる）→ 届いた（✓、2.5秒で消える）／送れなかった（!、押すまで消えない）
+function sendState(kind, msg, sub) {
+  var ov = document.getElementById('sendOv'), box = document.getElementById('sendBox');
+  clearTimeout(ov._t);
+  box.className = 'sendBox' + (kind === 'busy' ? '' : ' ' + kind);
+  document.getElementById('sendIcon').textContent = kind === 'done' ? '✓' : kind === 'ng' ? '!' : '';
+  document.getElementById('sendMsg').textContent = msg;
+  document.getElementById('sendSub').textContent = (sub || '') + (kind === 'ng' ? '\n\n（画面を押すと閉じます）' : '');
+  ov.classList.add('on');
+  ov.onclick = kind === 'busy' ? null : function(){ ov.classList.remove('on'); };
+  if (kind === 'done') ov._t = setTimeout(function(){ ov.classList.remove('on'); }, 2500);
+}
 function setBusy(on) { Array.prototype.forEach.call(document.querySelectorAll('.tile'), function(b){ b.disabled = on; }); }
 
 document.getElementById('sendBtn').onclick = function(){
