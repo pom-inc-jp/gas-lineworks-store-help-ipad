@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.03-6 -->
+<!-- built from store-bot-gas storeBot_ipad.gs 2026.11.04-1 -->
 <title>セルフォトヘルプ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -87,6 +87,8 @@ Object.defineProperty(google.script, 'run', { get: function(){
   .banner.wait .cxl { border-color:rgba(59,43,0,.55); }
   .dlg .reason { border:1px solid #ddd; background:#f6f6f6; border-radius:12px; font-size:17px; font-weight:700; padding:14px; color:#222; }
   .dlg .reason:active { background:#e9e9e9; }
+  .other .bub.go { font-weight:800; font-size:19px; color:#0a7d39; }
+  .me .bub.done { font-weight:700; }
   .pill.done { background:#5f6b7a; font-size:15px; font-weight:700; padding:7px 14px; }
   .pill.ok { background:#0a9e47; font-size:16px; font-weight:800; padding:8px 16px; }
   .pill.warn { background:#c77700; font-size:15px; font-weight:700; padding:7px 14px; }
@@ -181,7 +183,7 @@ Object.defineProperty(google.script, 'run', { get: function(){
   .dlg .yes { color:var(--send); font-weight:700; border-left:1px solid #e5e5e5; }
   .qrBtn { border:1px solid rgba(255,255,255,.5); background:transparent; color:#fff; border-radius:18px; padding:8px 12px; font-size:14px; }
   #qrBox svg, #qrBox img { width:240px; height:240px; }
-  .toast { position:fixed; left:50%; top:76px; transform:translateX(-50%); background:rgba(0,0,0,.78); color:#fff;
+  .toast { position:fixed; left:50%; top:40%; transform:translateX(-50%); background:rgba(0,0,0,.78); color:#fff;
            padding:10px 16px; border-radius:12px; font-size:15px; display:none; max-width:90%; text-align:center; z-index:5; }
 </style></head><body>
 <header><div class="av">🆘</div><div style="flex:1"><div class="nm">店舗ヘルプ</div><div class="st" id="sub">社員の LINE WORKS につながります</div></div></header>
@@ -324,28 +326,35 @@ function render(items) {
     var b0 = el('div', 'bub sys'); b0.style.borderColor = colorOf(it.store); var bt = el('b', null, '🆘 ヘルプ要請'); bt.style.color = colorOf(it.store); b0.appendChild(bt); b0.appendChild(document.createTextNode('\n' + emojiOf(it.store) + ' ' + it.store + '（#' + it.no + '）'));
     r0.appendChild(b0); chat.appendChild(r0);
     // やり取り
-    var hasStatusEvent = false;
-    (it.msgs || []).forEach(function(m) {
+    // 「向かいます」「行けなくなりました」は社員の発言、「取り消しました」は店舗の発言として、ふつうの吹き出しで出す
+    var hasStatusEvent = false, msgs = it.msgs || [], lastGo = -1;
+    msgs.forEach(function(m, i){ if (m.from === 'status' && /さんが向かいます/.test(m.text)) lastGo = i; });
+    msgs.forEach(function(m, i) {
       if (m.from === 'status') {
         hasStatusEvent = true;
-        if (m.text.indexOf('取り消しました') === 0) { it._cancelled = true; chat.appendChild(el('div', 'pill done', '🙆 ' + m.text)); return; }
-        var okm = m.text.indexOf('向かいます') >= 0;
-        chat.appendChild(el('div', 'pill ' + (okm ? 'ok' : 'warn'), (okm ? '✅ ' + m.text + '！' : '⚠️ ' + m.text)));
-        it._last = { ok: okm, text: m.text };
+        var g;
+        if (m.text.indexOf('取り消しました') === 0) {
+          it._cancelled = true;
+          meBub('取り消しました！' + m.text.replace(/^取り消しました/, ''), '', 'done');
+        } else if ((g = m.text.match(/^(.+?)さんが向かいます/))) {
+          staffBub(g[1], '向かいます！', i === lastGo && it.status === '対応済み' ? it.respTime : '', 'go');
+          it._last = { ok: true, text: m.text };
+        } else if ((g = m.text.match(/^(.+?)さんが行けなくなりました/))) {
+          staffBub(g[1], '行けなくなりました🙏', '', '');
+          it._last = { ok: false, text: m.text };
+        } else {
+          chat.appendChild(el('div', 'pill', m.text));
+        }
       } else if (m.from === 'ipad') {
-        var r = el('div', 'row me'); r.appendChild(el('div', 'bub', m.text)); chat.appendChild(r);
+        meBub(m.text, '', '');
       } else {
-        var r2 = el('div', 'row other'); r2.appendChild(el('div', 'icon', '👤'));
-        var c = el('div', 'col'); c.appendChild(el('div', 'who', m.who)); c.appendChild(el('div', 'bub', m.text));
-        r2.appendChild(c); chat.appendChild(r2);
+        staffBub(m.who, m.text, '', '');
       }
     });
-    // いまの状態（「向かいます」はやり取りの流れの中に出すので、記録がない古いものだけ最後に出す）
-    var st = '';
-    if (it.status === '対応済み') { if (!hasStatusEvent) st = '✅ ' + (it.responder || '社員') + 'さんが向かいます'; }
-    else if (it.status === '未対応') st = '⏳ 社員の対応を待っています';
-    else if (!it._cancelled) st = '受付終了（' + (it.status || '終了') + '）';
-    if (st) chat.appendChild(el('div', 'pill' + (it.status === '対応済み' ? ' ok' : ''), st + (it.status === '対応済み' ? '！' : '')));
+    // いまの状態（記録がない古いものの「向かいます」は最後に発言として出す）
+    if (it.status === '対応済み') { if (!hasStatusEvent) staffBub(it.responder || '社員', '向かいます！', it.respTime, 'go'); }
+    else if (it.status === '未対応') chat.appendChild(el('div', 'pill', '⏳ 社員の対応を待っています'));
+    else if (!it._cancelled) chat.appendChild(el('div', 'pill', '受付終了（' + (it.status || '終了') + '）'));
     if (it.open) { var o = el('option', null, '#' + it.no + ' ' + it.store + ' へ'); o.value = it.no; sel.appendChild(o); }
   });
   renderBanner(live.filter(function(it){ return it.open; }));
@@ -362,6 +371,19 @@ function render(items) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+// 吹き出し：社員（左・名前つき）／店舗（右）
+function staffBub(who, text, time, cls) {
+  var chat = document.getElementById('chat');
+  var r = el('div', 'row other'); r.appendChild(el('div', 'icon', '👤'));
+  var c = el('div', 'col'); c.appendChild(el('div', 'who', who || '社員')); c.appendChild(el('div', 'bub' + (cls ? ' ' + cls : ''), text));
+  r.appendChild(c); if (time) r.appendChild(el('div', 'meta', time)); chat.appendChild(r);
+}
+function meBub(text, time, cls) {
+  var chat = document.getElementById('chat');
+  var r = el('div', 'row me'); if (time) r.appendChild(el('div', 'meta', time));
+  r.appendChild(el('div', 'bub' + (cls ? ' ' + cls : ''), text)); chat.appendChild(r);
+}
+
 // 画面上の帯：やり取り中のヘルプの「いまの状態」を大きく出す
 function renderBanner(list) {
   var bn = document.getElementById('banner'); bn.textContent = '';
@@ -372,7 +394,8 @@ function renderBanner(list) {
     if (it.status === '対応済み') txt = '✅ ' + (it.responder || '社員') + 'さんが向かいます！';
     else {
       allOk = false;
-      txt = (it._last && !it._last.ok) ? '⚠️ ' + it._last.text : '⏳ 社員の対応を待っています';
+      txt = (it._last && !it._last.ok) ? '⚠️ ' + it._last.text.split('。')[0] : '⏳ 社員の対応を待っています';
+      if (it._last && !it._last.ok) sub = 'ほかの社員を探しています' + (sub ? '（' + sub + '）' : '');
     }
     var tx = el('span'); tx.appendChild(document.createTextNode(txt)); if (sub) tx.appendChild(el('small', null, sub)); ln.appendChild(tx);
     var cb = el('button', 'cxl', '取り消す'); cb.onclick = function(){ openCancel(it); }; ln.appendChild(cb);
